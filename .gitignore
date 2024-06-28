@@ -186,3 +186,8 @@ __pycache__/
 *.cache
 *.tmp
 temp/
+
+tests/__pycache__/__init__.cpython-312.pyc
+tests/__pycache__/test_app.cpython-312-pytest-8.2.2.pyc
+festapi/__pycache__/app.cpython-312.pyc
+festapi/__pycache__/__init__.cpython-312.pyc
