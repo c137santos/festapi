@@ -125,3 +125,36 @@ class Message(BaseModel):
 ```
 
 De tal forma que, o que estiver fora do definido pelo schema, vai ser ignorado. E se o valor estiver no tipo errado, vai ser convertido, se possível (se não é erro de validação).
+
+### Aula 03 - Criando Rotas CRUD 
+
+O pydantic serve para estabelecer contratos de API e para validação de dados. Pydantic valida contrato de entrada e contrato de saída. Uma curiosidade é que para validar e-mail pode ser com EmailString, classe do BaseModel. 
+Pydantic serve muito para documentar no docs!
+
+Response model x response class. Response classe troca a classe da resposta, por exemplo, trocar json pelo html. Já o response model define e valida a estrutura dos responses e request.
+
+Por padrão, o FastApi response 200 ok! Mas a resposta do POST é 201 created. Por isso é bom alterar para status_code=HTTPStatus.CREATED .
+
+Uma coisa linda é: criar o banco de dados FAKE apenas como uma lista! Então o ID será por meio do índice da lista.
+
+```
+database = []
+user_with_id = userDB(
+    id = len(database) + 1
+    **user.model_dump()
+)
+database.append(user_with_id)
+```
+
+O interessante dessa estratégia é o **user.model_dump(), o ** desempacota o objeto user (que está em formato pydantic) em chave e valor e adiciona o id, tudo para a função dump, que transforma em dict para ser inserido a lista, retornando apenas um formato específico determinado pelo pydantic, mesmo que você retorne o User inteiro!. 
+
+**DRY - Dont Repeat Yourself**. 
+O que é bom, é bom para ser reutilizado. Por isso, é bom criar uma função para criar um usuário. E devem ficar no arquivo confTest
+
+```
+@pytest.fixture()
+def client():
+    return TestClient(app)
+```
+
+No caso que não temos banco de dados ainda, o teste de read_users depende da execução do teste anterior que insere dados! Isso é péssimo, mas será resolvido na próxima aula, PORÉM, olha que legal que já funciona nem banco e com testes!
