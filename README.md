@@ -66,7 +66,6 @@ Agora temos enpoint /docs e /redoc. O primeiro é mais bonito e o segundo é mai
 ruff: é um linter e um formatador!
 pytest: e taskipy!
 
-```
 Instalação apenas para desenvolvimento deve ser identificada com --group!
 
 ```
@@ -158,3 +157,77 @@ def client():
 ```
 
 No caso que não temos banco de dados ainda, o teste de read_users depende da execução do teste anterior que insere dados! Isso é péssimo, mas será resolvido na próxima aula, PORÉM, olha que legal que já funciona nem banco e com testes!
+
+### Aula 04 - Banco de Dados com SQLAlchemy e Gerenciando Migrações com Alembic
+
+#### SQLAlchemy
+Uma biblioteca para trabalhar com SQL. SQLAlchemy realiza automações com a iteração com o db, e também contém um ORM (Object Relational Mapping) que mapeia objetos python para tabelas em um banco de dados relacional.
+
+```@table_registry.mapped_as_dataclass```  registra uma tabela mapeando a classe de DADOS! Pode ser também o declarative_base, imperative_base!
+
+Esse mapeamento é necessário, porque existem diversos tipos no DB para de algum tipo do Python, ex, int para python é um, para o DB pode ser diversos tipos de int diferente! O que se deseja é mapear o tipo Python para SQL e vice-versa, ou seja, trazer o dado do banco de modo a ser possível sua conversão para o tipo determinado em Python, qual nossa exemplo é int. Por isso Mapped[]!
+
+o SQLAlchemy escolhe que ID pode ser um smallInt, pois é mais adequado para armazenamento de dados de int Python, e quando for chamado para o código, é possível converter o smallInt em um Int python sem problemas.
+
+```
+id: Mapped[int] <-> smallInt
+```
+
+Para formalização, o nome da classe do Model é User (singular), pois cria um User, onde os atributos são colunas da tabela. Mas o nome da tabela, ou seja, __tablename__ é users, pois manipula users!
+
+mapped_column é quem dá restrições as colunas. Por exemplo, nullable=False.
+User é um objeto scalar$ 
+
+Como testar?
+
+```
+$ python -i festapi/models.py 
+>>> User(username='Santos', password='senha', email='mail@gmail.com')
+User(id=None, username='Santos', password='senha', email='mail@gmail.com', created_at=None)
+```
+
+Os none foram porque decidimos com mapped_column que isso ia ser responsabilidade do DB. Essa questão vai ocorrer quando o banco de dados for criado.
+
+func.now() é data e hora do servidor, e não UTC. (?)
+
+**Engine** é o ponto de conexão do DB. Podemos criar um db provisório com sqlite (esse vem junto com a instalação do Python), em memória para os testes, e um permanente para aplicação. 
+Falando de testes! Imporanto o register com create_all dá a vantagem de conseguir criar todos os metadados de uma vez.
+
+```
+engine = create_engine('sqlite:///:memory:')
+table_registry.metadata.create_all(engine)
+```
+
+Importante que seja :memory:, pois caso crie um arquivo, ele não vai ser jogado fora, e então os objetos vão persistir no banco de teste e causar interferências ruins. 
+Para aplicação, vamos criar como arquivo, pois queremos persistir os dados.
+
+```
+engine = create_engine('sqlite:///database.db')
+```
+
+**Session**  Para não ter uma chamada direta do DB, usamos a session, pois ela é a camada intermediaria entre nosso código e o DB. ELe é um espaço temporário, ela é um stage, por isso ele consegue dar commit de diversos add!
+
+Isso é um padrão de projeto chamado Unit of Work (UoW) que garante a ACID (Atomicidade, Consistência, Isolamento e Durabilidade) das transações, proporcionando uma maneira robusta de manter a integridade dos dados.
+
+scalar = comando que realiza o mapeamento do query sql como objeto python.
+
+A session deve ser transformado em um fixture no conftest.py usando recursos de yield, para que a session seja fechada após o teste.
+
+**pydantic-settings** ajudará a separar as configurações do projeto do código. O arquivo vai buscar as infos no .env.
+
+#### Alembic
+É uma ferramenta de migração de banco de dados para SQLAlchemy que ajuda na evolução do banco.
+
+```
+alembic init migrations
+```
+
+Lá dentro do env.py do migrations que criou, conseguimos indicar onde está o banco de dados com metadata do registry!
+
+O target_metadata ajuda no comando --autogenerate, pois o alembic sabe onde inspencionar os metadados do banco e gerar uma nova versão a partir de como o modelo se encontra.
+
+```
+config.set_main_option('sqlachemy.url', Settings().DATABASE_URL)
+target_metadata = table_registry.metadata
+```
+
