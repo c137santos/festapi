@@ -231,3 +231,93 @@ config.set_main_option('sqlachemy.url', Settings().DATABASE_URL)
 target_metadata = table_registry.metadata
 ```
 
+**bugs**  🐛
+Eu tive alguns bugs nessa aula, simplesmente meu comando ```alembic revision --autogenerate -m 'criar user' ``` criava upgrade e donwgrades vazios. E por mais que tivesse importado o metadados para o env.py do migrations de alembic, mesmo com alembic.ini, ele continuava gerando vazio. O que ocorreu é que, ao tentar rodar um teste com o endereço database.db onde há o comando de criar tabelas, em um momento que eu havia apenas escrito o criar tabelas e não deletar tabelas após o teste! Então ele criou tabelas nesse database.db! 
+
+Ai eu estava pedindo para o alembic evoluir meu banco, e nada de detectar mudanças. Afinal, o alembic via  o database.db com a tabela criada no teste e concluia que a class User já existia. Descobri isso quando eu adicionei um campo na Class User e ele mapeou apenas a mudança daquele campo. Diante disso, deletei database.db e rodei o comando novamente, e ele gerou o upgrade e o downgrade corretamente.
+
+
+### Aula 05 -  Integrando Banco de Dados (SQLAlchemy) ao FastAPI
+
+1 - Vamos deixar o db fake de listinha para trás. Isso significa abri uma engine a partir da função create_engine, onde o endereço do banco está dentro da função Settings().DATABASE_URL. Após isso, abre uma session, onde se utilizar o scalar do SQLAlchemy para fazer as queries, seja com select, insert, update, delete. 
+
+uma sessão é aquilo que fica em stage, e que só vai gravar no banco após o commit!
+
+```
+-- criando a sessão --
+session = Session()
+-- Stage --
+session.add(user)
+-- Commit--
+session.commit()
+```
+
+Para retornar um erro no endpoint, o padrão, essencial, é que seja por meio do raise HTTPException. 
+
+**bugs**  🐛
+Eu não havia aplicado o ```alembic upgrade head``` para atualizar o banco de dados, e ai ficava rolando um erro 500 em relação tabela user
+
+
+
+2- Desacoplando a chamada do DB com injeção de dependência. 
+
+O fastApi tem o Depends() para realizar a injeção de dependência. Usar isso ajuda a trocar o cliente de prod para o cliente de teste com a função dependency_overrides no confest.py.
+Sem a injeção com possibilidade de reescrita com dependency_overrides, seria necessário mockar o get_session em todos os testes que acessam o db. Ele é um fixture que recebe outra fixute.
+
+ Depends ajuda a declarar e gerenciar essas dependências: "Antes de executar esta função, execute primeiro essa outra função e passe-me o resultado"
+
+```
+@pytest.fixture()
+def client(session):
+
+    def get_session_override():
+        return session
+
+    with TestClient(app) as client:
+        app.dependency_overrides[get_session] = get_session_override
+        yield client
+
+        app.dependency_overrides.clear()
+```
+
+Com isso, tudo que depende do banco de dados, em produção, será sobrescrito para usar o banco de teste.
+
+**bugs**  🐛
+
+Com o ``` python -x ``` a gente consegue perceber esse erro
+
+```
+sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 127811301049920 and this is thread id 127811391511424.
+```
+
+Como todo mundo depende do mesmo esquema do db. Um objeto do SQLAlchemy não pode ser compartilhado entre threads. Por isso, é necessário criar um novo objeto de sessão para cada thread. Tanto teste quanto a produção estão rodando em threads diferentes. E ele não consegue compartilhar a sessão do db. Então vamos dizer a ele para não checar na mesma thread, ou seja, se os objetos forem criados em threads diferentes, ele não vai reclamar. 
+
+Tudo isso a parti do   connect_args={'check_same_thread': False}, pool=StaticPool
+
+3 - Boas práticas de paginação
+
+O fastapi pode contar com ```limit``` para resultados, e o ```offset``` com a variável skip para pular resultados de x em x. Isso traz os resultados paginados.
+
+4 - Comparando modelos do pydantic na saída de teste de endpoint
+
+Não é possível usar o user fixture direto na comparação de json() do assert do teste, o ideial é usar o model_validate com model_dump.
+
+```
+user_schema = UserPublic.model_validate(user).model_dump()
+```
+
+Isso deve ser combinado com essa linha lá no schema. POis o model_config um schema do pydantic altera o comportamento do 'model_validate'
+
+```
+model_config = ConfigDict(from_attributes=True)
+```
+
+5 - Ajustando o coverage
+
+Devido ao fato que mudamos a sessão por uma injeção de dependência de banco de teste, então a session nunca é testado, por isso, pode rolar inserir o pragma: no cover para não ser testado.
+
+```
+def get_session():  # pragma: no cover
+    with Session(engine) as session:
+        yield session
+```
