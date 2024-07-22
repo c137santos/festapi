@@ -321,3 +321,118 @@ def get_session():  # pragma: no cover
     with Session(engine) as session:
         yield session
 ```
+
+### 6º Autenticação e autorização
+
+Autenticação é se provar que é você é você mesmo. Realizar o login, por exemplo. A autorização é o que você pode fazer depois de se autenticar, as ações que tem permissão para realizar no sistema.
+
+1 - Armazenamento senha de forma segura
+
+Nosso armazenamento deveria ser diferente, pois hoje está sendo armazenado em texto puro. Precisamos prevenir até mesmo erros eventuais, como alterar um schema de formar a revelar a senha.
+
+Um grande problema é que as pessoas usam a mesma senha para diversos lugares, deixando o cliente exposto.
+
+O armazenamento de senhas vamos usar um hash com uma biblioteca de senhas. o ```pwdlib ``` é uma lib de encriptação de mão única (por conta do uso do hash), ou seja, significa que não dá para descriptar. E o argon2 é o padrão de hash mais atual.
+
+```
+poetry add "pwdlib[argon2]"
+```
+
+Com contexto da classe PassWordHash no arquivo ```security.py```, é possível encripta e verificar a senha.
+
+2 - OAuth2 
+
+Para desenvolver um login com um form do FastAPI com OAuth2, devemos usar um token de 30 minutos validado por um timedelta.
+
+```
+OAuth2PasswordRequestForm
+```
+
+O endpoint de tem algumas especificidades. Por exemplo, existe uma injeção de dependência como um placebo com a notação ``` = Dependes()```. Essa notação diz ao sistema que o tipo deve ser respeitado.
+Esse endpoint não tem como padrão o json(), mas sim um x-www-form-urlencoded, por isso, o request.form(). O que já força a inserção de um username e password por default.
+
+Para usar o request.form acima vai ser preciso o python-multipart.
+
+```
+poetry add python-multipart
+```
+
+3 - JWT
+
+O JWT é um padrão (RFC 7519) para transmitir informações de maneira segura. É um JSON transmitido via Web em formato de Token. O JWT assina (com o algoritmo HMAC) a comunicação para que o servidor saiba que a mensagem não foi alterada e a pessoa se encontra autenticada. 
+
+o JWT consiste em 3 partes, o headers, contendo informações sobre o tipo de assinatura e token utilizados. Temos o payload, que contém as claims.
+
+O payload e as claims. Os playload tem as restrições e informações sobre o token. Por exemplo, o sub é quem tem o token e o exp é o tempo. 
+
+https://www.iana.org/assignments/jwt/jwt.xhtml
+
+```
+sub (subject) = Entidade à quem o token pertence, normalmente o ID do usuário;
+iss (issuer) = Emissor do token;
+exp (expiration) = Timestamp de quando o token irá expirar;
+iat (issued at) = Timestamp de quando o token foi criado;
+aud (audience) = Destinatário do token, representa a aplicação que irá usá-lo.
+```
+
+E por fim, a signature. A assinatura utilizada que confirma que a mensagem não foi alterada. O exemplo de um JWT é esse formato separado por ponto.
+
+```
+HMACSHA256(
+    base64UrlEncode(header) + "." +
+    base64UrlEncode(payload),
+ nosso-segredo
+)
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0ZUB0ZXN0LmNvbSIsImV4cCI6MTY5MDI1ODE1M30.Nx0P_ornVwJBH_LLLVrlJoh6RmJeXR-Nr7YJ_mlGY04
+```
+
+Vamos gerar o token em python com ```pyjwt```. Em outros projetos existe, por exemplo, python-jose.
+
+```
+poetry add pyjwt
+```
+
+Ao gerar tokens, você pode ver as informações por meio da função encode(). Também podemos verificar o decoded de um jwt com no site https://jwt.io/ Ou seja, isso quer dizer que é possível ler as informações transmitidas no JWT, não é possível alterar a informação ou forjar um novo token, mas ler sim! ENtão não inclua informações sensíveis
+
+A resposta vai ser formatado por um BaseModel onde especifica o token de acesso e o tipo de token, para que o usuário saiba lidar. 
+
+Para o JWT, o usuário vai enviar as credenciais para o endpoint de geração de token (função geradora nossa está em security em create_access_token), e esse vai devolver o token de acesso com base nesse Model. Ai todas as solicitações subsequentes vão ser feitas com o token de acesso.
+
+
+```
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+```
+
+Agora nos testes do token, para enviar formulário não é JSON, é sim data.
+
+** Bug ** 🐛
+```
+E       pwdlib.exceptions.UnknownHashError: This hash can't be identified. Make sure it's valid and that its corresponding hasher is enabled.
+```
+
+Quando inserimos a senha por fixture, o password estava limpo, e não foi passado pelo hash. Por isso, o erro. FOi preciso adapatar no conftest.py para passar a senha pelo hash para User.
+
+Quando sujamos a senha, então temos um bad_request.
+
+```
+==================================================== short test summary info ====================================================
+FAILED tests/test_app.py::test_login_for_access_token - assert 400 == <HTTPStatus.OK: 200>
+ +  where 400 = <Response [400 Bad Request]>.status_code
+ +  and   <HTTPStatus.OK: 200> = HTTPStatus.OK
+
+``` 
+
+Isso ocorre, pois agora ele só conhece a senha suja. Portanto,vamos usar **Monkey Patch**, que é alterar o objeto em tempo de execução. Adicionando então o clean_password nesse user. 
+
+4 - Autorização.
+
+Garantir que o cliente possa alterar ou deletar somente sua conta.
+
+Após a descrição da função get_current_user, que é a função que vai pegar o token e verificar se ele é válido, agora no openapi.json da aplicação é possível logar E os eventos de put e delete são restritos. 
+
+![alt text](/static/imgs/autorização.png)
+
+Preciso ajustar os testes com fixture de token!

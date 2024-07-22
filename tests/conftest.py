@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 from festapi.app import app
 from festapi.database import get_session
 from festapi.models import User, table_registry
+from festapi.security import get_password_hash
 
 
 @pytest.fixture()
@@ -38,9 +39,25 @@ def session():
 
 @pytest.fixture()
 def user(session):
-    user = User(username='Teste', email='teste@test.com', password='testtest')
+    passw = 'testes'
+    user = User(
+        username='Teste',
+        email='teste@test.com',
+        password=get_password_hash(passw),
+    )
+
     session.add(user)
     session.commit()
     session.refresh(user)
+    user.clean_password = passw
 
     return user
+
+
+@pytest.fixture()
+def token(client, user):
+    response = client.post(
+        '/token',
+        data={'username': user.email, 'password': user.clean_password},
+    )
+    return response.json()['access_token']
