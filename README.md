@@ -490,3 +490,13 @@ T_CurrentUser = Annotated[User, Depends(get_current_user)]
 Agora retiramos todas as variáveis de ambiente que estavam chumbadas no código e passamos para o .env. A gente substituir pelo retorno do Settings(). 
 
 O importante é usar o extra='ignore' para que possamos ter mais variáveis a mais no .env que pode não ter haver com settings. Como por exemplo o endereço do banco de dados. Ou configs da AWS.
+
+### 11º - Testes com integração Contínua mp Github Actions. 
+
+Você pode fazer várias ações, pode ser visto https://github.com/marketplace?type=actions
+
+**Bug** 🐛
+
+Devido ao fato de Settings ser modelado para encarregar um env. Pode rolar um pydantic error, pois ele não consegue encontrar o env. 
+
+Vamos resolver com gh
