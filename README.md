@@ -436,3 +436,57 @@ Após a descrição da função get_current_user, que é a função que vai pega
 ![alt text](/static/imgs/autorização.png)
 
 Preciso ajustar os testes com fixture de token!
+
+
+### 7º Routers
+
+1 - O routers ajuda a reorganizar o código em subaplicativo. O routers permite aplicar o design soc.
+
+Soc - Separation of Concerns. É um princípio de design de software para separar um programa em seções distintas, de tal forma que cada seção aborde uma preocupação separada.
+
+
+Onde prefixo serão adicionados automaticamente, e tags servirão para separar as seções no /docs.
+
+```
+router = APIRouter(
+    prefix='/users',
+    tags=['users']
+)
+```
+
+Caso não se atente na inclusão das rotas, pode acabar esquecendo de incluir o ```.router``` de seus arquivos. E isso pode gerar o erro estranho.
+
+*bug* 🐛
+![alt text](/static/imgs/bugsrouter.png)
+
+Então, ao invés de users, deve usar users.router
+
+
+```
+app.include_router(users)
+app.include_router(users.router)
+```
+
+2 - O tipo Annotated
+
+O FastApi vai executar a função, anotar o tipo e retornar para variável. Então isso:
+
+```
+session: Session = Depends(get_session)
+current_user: User = Depends(get_current_user)
+```
+Podemos abreviar tudo para que vire isso aqui: 
+
+```
+from typing import Annotated
+
+T_Session = Annotated[Session, Depends(get_session)]
+T_CurrentUser = Annotated[User, Depends(get_current_user)]
+
+```
+
+3- Env
+
+Agora retiramos todas as variáveis de ambiente que estavam chumbadas no código e passamos para o .env. A gente substituir pelo retorno do Settings(). 
+
+O importante é usar o extra='ignore' para que possamos ter mais variáveis a mais no .env que pode não ter haver com settings. Como por exemplo o endereço do banco de dados. Ou configs da AWS.
