@@ -493,10 +493,36 @@ O importante é usar o extra='ignore' para que possamos ter mais variáveis a ma
 
 ### 11º - Testes com integração Contínua mp Github Actions. 
 
-Você pode fazer várias ações, pode ser visto https://github.com/marketplace?type=actions
+A integração continua significa estar sempre realizando features no código de forma que antes do deploy a partir da execução dos testes em um workflows visando garantir a qualidade do código.
+No GA (Github Actions) existem várias opções de ações que podem acontecer caso uma pipeline falhe ou não, pode ser visto https://github.com/marketplace?type=actions
 
-**Bug** 🐛
+Workflow significa o ambiente e os passos quais as ações vão acontecer. Na escolha de um Ubutun, primeiro vem as configurações de variáveis de ambiente depois as instalações e execuções de coisas. Nesse caso será o ubuntu
 
-Devido ao fato de Settings ser modelado para encarregar um env. Pode rolar um pydantic error, pois ele não consegue encontrar o env. 
+```
+jobs:
+  test:
+    runs-on: ubuntu-latest
+```
 
-Vamos resolver com gh
+**Bug** 🐛 `Poetry could not find a pyproject.toml file in <path> or its parents`
+
+
+Quando o poetry não encontra o arquivo pyproject.toml, ele não pode instalar as dependências. Isso ocorre porque o arquivo pyproject.toml não está na raiz do projeto, para solucionar esse problema, adicionaremos um passo antes da execução dos testes para copiar o código do nosso repositório para o ambiente do workflow. O GitHub Actions oferece uma ação específica para isso, chamada actions/checkout. 
+Serve como se estivesse dando um git clone do repositório para dentro desse ambiente ubutun que é um conteiner isolado!
+
+```
+steps:
+    - name: Copia os arquivos do repositório
+    uses: actions/checkout@v3
+```
+
+
+```
+**Bug** 🐛 `E   pydantic_core._pydantic_core.ValidationError: 4 validation errors for Settings E   DATABASE_URL`
+
+Devido ao fato de Settings ser modelado para encarregar um env, sem subir o .env (QUE É O CERTO), a pipeline dá erro pydantic, pois ele não consegue encontrar as variáveis.
+
+Configurando variáveis lá dentro do github e adicionar a notação $ {{secrets}} no yaml
+![alt text](./static/imgs/secretGH.png)
+
+Act é uma lib do Nektos que ajuda você não ter 1 milhão de pipelines quebradas.  https://github.com/nektos/act
