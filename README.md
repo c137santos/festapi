@@ -72,7 +72,7 @@ Instalação apenas para desenvolvimento deve ser identificada com --group!
 $ poetry add --group dev pytest pytest-cov taskipy ruff httpx
 ```
 
-Para o tasks, as abreaviaturas são definidas no arquivo pyproject.toml. E existe um macete. Se você escreve pre e pos em um comando, ao rodar o central, ele vai 1ª rodar os pré comandos, depois o comando central e por fim os pós comandos.
+Para o tasks, as abreviaturas são definidas no arquivo pyproject.toml. E existe um macete. Se você escreve pre e pos em um comando, ao rodar o central, ele vai 1ª rodar os pré comandos, depois o comando central e por fim os pós comandos.
 
 ```
 [tool.taskipy.tasks]
@@ -231,8 +231,9 @@ config.set_main_option('sqlachemy.url', Settings().DATABASE_URL)
 target_metadata = table_registry.metadata
 ```
 
-**bugs**  🐛
-Eu tive alguns bugs nessa aula, simplesmente meu comando ```alembic revision --autogenerate -m 'criar user' ``` criava upgrade e donwgrades vazios. E por mais que tivesse importado o metadados para o env.py do migrations de alembic, mesmo com alembic.ini, ele continuava gerando vazio. O que ocorreu é que, ao tentar rodar um teste com o endereço database.db onde há o comando de criar tabelas, em um momento que eu havia apenas escrito o criar tabelas e não deletar tabelas após o teste! Então ele criou tabelas nesse database.db! 
+**BUG**  🐛 `alembic revision --autogenerate -m 'criar user' `
+
+Eu tive alguns BUGs nessa aula, simplesmente meu comando ```alembic revision --autogenerate -m 'criar user' ``` criava upgrade e donwgrades vazios. E por mais que tivesse importado o metadados para o env.py do migrations de alembic, mesmo com alembic.ini, ele continuava gerando vazio. O que ocorreu é que, ao tentar rodar um teste com o endereço database.db onde há o comando de criar tabelas, em um momento que eu havia apenas escrito o criar tabelas e não deletar tabelas após o teste! Então ele criou tabelas nesse database.db! 
 
 Ai eu estava pedindo para o alembic evoluir meu banco, e nada de detectar mudanças. Afinal, o alembic via  o database.db com a tabela criada no teste e concluia que a class User já existia. Descobri isso quando eu adicionei um campo na Class User e ele mapeou apenas a mudança daquele campo. Diante disso, deletei database.db e rodei o comando novamente, e ele gerou o upgrade e o downgrade corretamente.
 
@@ -254,9 +255,8 @@ session.commit()
 
 Para retornar um erro no endpoint, o padrão, essencial, é que seja por meio do raise HTTPException. 
 
-**bugs**  🐛
+**BUG**  🐛
 Eu não havia aplicado o ```alembic upgrade head``` para atualizar o banco de dados, e ai ficava rolando um erro 500 em relação tabela user
-
 
 
 2- Desacoplando a chamada do DB com injeção de dependência. 
@@ -282,13 +282,9 @@ def client(session):
 
 Com isso, tudo que depende do banco de dados, em produção, será sobrescrito para usar o banco de teste.
 
-**bugs**  🐛
+**BUG**  🐛 ` sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 127811301049920 and this is thread id 127811391511424. `
 
 Com o ``` python -x ``` a gente consegue perceber esse erro
-
-```
-sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 127811301049920 and this is thread id 127811391511424.
-```
 
 Como todo mundo depende do mesmo esquema do db. Um objeto do SQLAlchemy não pode ser compartilhado entre threads. Por isso, é necessário criar um novo objeto de sessão para cada thread. Tanto teste quanto a produção estão rodando em threads diferentes. E ele não consegue compartilhar a sessão do db. Então vamos dizer a ele para não checar na mesma thread, ou seja, se os objetos forem criados em threads diferentes, ele não vai reclamar. 
 
@@ -408,10 +404,7 @@ class Token(BaseModel):
 
 Agora nos testes do token, para enviar formulário não é JSON, é sim data.
 
-** Bug ** 🐛
-```
-E       pwdlib.exceptions.UnknownHashError: This hash can't be identified. Make sure it's valid and that its corresponding hasher is enabled.
-```
+**BUG** 🐛 ` E       pwdlib.exceptions.UnknownHashError: This hash can't be identified. Make sure it's valid and that its corresponding hasher is enabled. `
 
 Quando inserimos a senha por fixture, o password estava limpo, e não foi passado pelo hash. Por isso, o erro. FOi preciso adapatar no conftest.py para passar a senha pelo hash para User.
 
@@ -456,8 +449,8 @@ router = APIRouter(
 
 Caso não se atente na inclusão das rotas, pode acabar esquecendo de incluir o ```.router``` de seus arquivos. E isso pode gerar o erro estranho.
 
-*bug* 🐛
-![alt text](/static/imgs/bugsrouter.png)
+**BUG** 🐛 Não identificou a rota
+![alt text](/static/imgs/BUGsrouter.png)
 
 Então, ao invés de users, deve usar users.router
 
@@ -490,3 +483,37 @@ T_CurrentUser = Annotated[User, Depends(get_current_user)]
 Agora retiramos todas as variáveis de ambiente que estavam chumbadas no código e passamos para o .env. A gente substituir pelo retorno do Settings(). 
 
 O importante é usar o extra='ignore' para que possamos ter mais variáveis a mais no .env que pode não ter haver com settings. Como por exemplo o endereço do banco de dados. Ou configs da AWS.
+
+### 11º - Testes com integração Contínua mp Github Actions. 
+
+A integração continua significa estar sempre realizando features no código de forma que antes do deploy a partir da execução dos testes em um workflows visando garantir a qualidade do código.
+No GA (Github Actions) existem várias opções de ações que podem acontecer caso uma pipeline falhe ou não, pode ser visto https://github.com/marketplace?type=actions
+
+Workflow significa o ambiente e os passos quais as ações vão acontecer. Na escolha de um Ubutun, primeiro vem as configurações de variáveis de ambiente depois as instalações e execuções de coisas. Nesse caso será o ubuntu
+
+```
+jobs:
+  test:
+    runs-on: ubuntu-latest
+```
+
+**BUG** 🐛 `Poetry could not find a pyproject.toml file in <path> or its parents`
+
+
+Quando o poetry não encontra o arquivo pyproject.toml, ele não pode instalar as dependências. Isso ocorre porque o arquivo pyproject.toml não está na raiz do projeto, para solucionar esse problema, adicionaremos um passo antes da execução dos testes para copiar o código do nosso repositório para o ambiente do workflow. O GitHub Actions oferece uma ação específica para isso, chamada actions/checkout. 
+Serve como se estivesse dando um git clone do repositório para dentro desse ambiente ubutun que é um conteiner isolado!
+
+```
+steps:
+    - name: Copia os arquivos do repositório
+    uses: actions/checkout@v3
+```
+
+**BUG** 🐛 `E   pydantic_core._pydantic_core.ValidationError: 4 validation errors for Settings E   DATABASE_URL`
+
+Devido ao fato de Settings ser modelado para encarregar um env, sem subir o .env (QUE É O CERTO), a pipeline dá erro pydantic, pois ele não consegue encontrar as variáveis.
+
+Configurando variáveis lá dentro do github e adicionar a notação $ {{secrets}} no yaml
+![alt text](./static/imgs/secretGH.png)
+
+Act é uma lib do Nektos que ajuda você não ter 1 milhão de pipelines quebradas.  https://github.com/nektos/act
