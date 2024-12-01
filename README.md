@@ -490,3 +490,37 @@ T_CurrentUser = Annotated[User, Depends(get_current_user)]
 Agora retiramos todas as variáveis de ambiente que estavam chumbadas no código e passamos para o .env. A gente substituir pelo retorno do Settings(). 
 
 O importante é usar o extra='ignore' para que possamos ter mais variáveis a mais no .env que pode não ter haver com settings. Como por exemplo o endereço do banco de dados. Ou configs da AWS.
+
+
+### 8º Tornando o sistema de autenticação mais robusto
+
+Para representar algo mais próximo de um ambiente de produção nos testes, decidi criar objetos usando o `factory-boy`. A ideia é ter uma fábrica de modelos que cria instâncias de uma `modelClass`.
+
+```bash
+poetry add --group dev factory-boy
+```
+
+Criei uma classe `UserFactory` no `conftest.py`, que herda do `factory-boy`. Dentro dela, defini uma classe `Meta` que indica qual modelo será construído (`model = User`). Com a criação de atributos padrão, não é necessário definir os campos manualmente toda vez.
+
+```python
+class Meta:
+    model = User
+
+username = factory.Sequence(lambda n: f'test{n}')  # Objeto ansioso
+email = factory.LazyAttribute(lambda obj: f'{obj.username}@teste.com')  # Atributo lazy
+password = factory.LazyAttribute(lambda obj: f'{obj.username}+senha')  # Atributo lazy usando ansioso
+```
+
+Isso permite criar usuários de teste facilmente:
+
+```python
+UserFactory(username='bla', password='bla', email='bla')
+```
+
+Com os atributos padrão definidos, não preciso definir os campos manualmente. Isso é útil para criar `other_user` em casos onde um usuário deve interagir com outros usuários.
+
+---
+
+Além disso, criei um endpoint POST na rota `/refresh_token` para atualizar o token de acesso de um usuário autenticado. Utilizo a função `get_current_user` para obter o usuário atual e, em seguida, gero um novo token de acesso com o email do usuário. O endpoint retorna um dicionário contendo o novo token de acesso e o tipo de token (`bearer`). Assim, posso usar um token existente para gerar um novo token. A renovação só é válida enquanto o token de acesso estiver ativo, caso esteja inválido, isso não vai funcionar. 
+
+Foi adotado a estratégia do refresh para renovar o token. O login é feito uma vez e, a partir daí, o token é atualizado. Isso é útil para evitar que o usuário tenha que fazer login toda vez que o token expirar e evitar enviar novamente os dados.
