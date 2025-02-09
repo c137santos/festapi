@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from festapi.models import User
+from festapi.models import Todo, User
 
 
 def test_create_user(session):
@@ -15,3 +15,20 @@ def test_create_user(session):
     assert result.username == 'Santos'
     assert result.password == 'senha'
     assert result.email == 'mail@gmail.com'
+
+
+def test_create_todo(session, user: User):
+    todo = Todo(
+        title='Test Todo',
+        description='Test Desc',
+        state='draft',
+        user_id=user.id,
+    )
+
+    session.add(todo)
+    session.commit()
+    session.refresh(todo)
+
+    user = session.scalar(select(User).where(User.id == user.id))
+
+    assert todo in user.todos

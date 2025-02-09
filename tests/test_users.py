@@ -133,7 +133,7 @@ def test_delete_user(client, user, token):
     assert response.json() == {'message': 'User deleted'}
 
 
-def test_delete_wrong_user(client, user, token):
+def test_delete_user_wrong_user(client, user, token):
     response = client.delete(
         f'/users/{user.id + 1}',
         headers={'Authorization': f'Bearer {token}'},

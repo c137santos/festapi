@@ -1,4 +1,5 @@
 import factory
+import factory.fuzzy
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -7,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from festapi.app import app
 from festapi.database import get_session
-from festapi.models import User, table_registry
+from festapi.models import Todo, TodoState, User, table_registry
 from festapi.security import get_password_hash
 
 
@@ -79,8 +80,21 @@ class UserFactory(factory.Factory):
         model = User
 
     username = factory.Sequence(lambda n: f'test{n}')
+    # Sequence Adicionará +1 em cada objeto criado
     # esse é um objeto ansioso
     email = factory.LazyAttribute(lambda obj: f'{obj.username}@teste.com')
     # esse dado não é pré-pronto, mas sim quando ele é carregado
     password = factory.LazyAttribute(lambda obj: f'{obj.username}+senha')
     # objeto lazy usando ansioso
+
+
+class TodoFactory(factory.Factory):
+    class Meta:
+        model = Todo
+
+    title = factory.Faker('text')
+    # Com faker, ele cria algo qualquer do mesmo tipo para o lugar
+    description = factory.Faker('text')
+    state = factory.fuzzy.FuzzyChoice(TodoState)
+    # FuzzyChoice é um valor randômico a partir do TodoState
+    user_id = 1

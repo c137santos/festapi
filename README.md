@@ -499,28 +499,135 @@ Para representar algo mais próximo de um ambiente de produção nos testes, dec
 ```bash
 poetry add --group dev factory-boy
 ```
-
 Criei uma classe `UserFactory` no `conftest.py`, que herda do `factory-boy`. Dentro dela, defini uma classe `Meta` que indica qual modelo será construído (`model = User`). Com a criação de atributos padrão, não é necessário definir os campos manualmente toda vez.
 
 ```python
-class Meta:
-    model = User
 
-username = factory.Sequence(lambda n: f'test{n}')  # Objeto ansioso
-email = factory.LazyAttribute(lambda obj: f'{obj.username}@teste.com')  # Atributo lazy
-password = factory.LazyAttribute(lambda obj: f'{obj.username}+senha')  # Atributo lazy usando ansioso
+class UserFactory(factory.Factory):
+    class Meta:
+        model = User
+
+    username = factory.Sequence(lambda n: f'test{n}') # Sequence Adicionará +1 em cada objeto criado
+    # esse é um objeto ansioso
+    email = factory.LazyAttribute(lambda obj: f'{obj.username}@teste.com')
+    # esse dado não é pré-pronto, mas sim quando ele é carregado, em tempo de execução.
+    password = factory.LazyAttribute(lambda obj: f'{obj.username}+senha')
+    # objeto lazy usando ansioso
+
 ```
 
-Isso permite criar usuários de teste facilmente:
+Isso permite criar objetocs do tipo usuário em testes facilmente:
 
 ```python
-UserFactory(username='bla', password='bla', email='bla')
+user = UserFactory(username='bla', password='bla', email='bla') 
+user2 = UserFactory(username='bla', password='bla', email='bla')  # elas retornarão um novo User, pois estamos fixando apenas a senha
+user == user2  # False
 ```
 
 Com os atributos padrão definidos, não preciso definir os campos manualmente. Isso é útil para criar `other_user` em casos onde um usuário deve interagir com outros usuários.
+Assim, podemos avaliar como nosso sistema reage quando um usuário tenta realizar uma ação não autorizada.
 
+Testando a expiração do token.
+
+Para realizar esse teste, usaremos uma biblioteca chamada freezegun. freezeguné uma biblioteca Python que nos permite "congelar" o tempo em um ponto específico ou avançá-lo conforme necessário durante os testes. Isso é útil para testar a expiração de tokens de acesso.
+
+```bash
+poetry add --group dev freezegun
+pip list | grep freezegun
+```
 ---
 
-Além disso, criei um endpoint POST na rota `/refresh_token` para atualizar o token de acesso de um usuário autenticado. Utilizo a função `get_current_user` para obter o usuário atual e, em seguida, gero um novo token de acesso com o email do usuário. O endpoint retorna um dicionário contendo o novo token de acesso e o tipo de token (`bearer`). Assim, posso usar um token existente para gerar um novo token. A renovação só é válida enquanto o token de acesso estiver ativo, caso esteja inválido, isso não vai funcionar. 
+Além disso, criei um endpoint POST na rota `/refresh_token` para atualizar o token de acesso de um usuário autenticado. Utilizo a função `get_current_user` para obter o usuário atual e, em seguida, gero um novo token de acesso com o email do usuário. 
+Caso esteja expirado o tempo especificado no exp na claim, então temos um ExpiredSignatureError. 
+O endpoint retorna um dicionário contendo o novo token de acesso e o tipo de token (`bearer`).
+Assim, posso usar um token existente para gerar um novo token. A renovação só é válida enquanto o token de acesso estiver ativo, caso esteja inválido, isso não vai funcionar. 
 
 Foi adotado a estratégia do refresh para renovar o token. O login é feito uma vez e, a partir daí, o token é atualizado. Isso é útil para evitar que o usuário tenha que fazer login toda vez que o token expirar e evitar enviar novamente os dados.
+
+### 9º Criando Rotas CRUD para Gerenciamento de Tarefas
+
+Serão CRUDs bem feitos associados aos Users!
+
+Na criação do schema de resposta do ToDo, foi importado um Enum `TodoState` descrito como classe nos models para servir ao `response_class` do endpoint `create_todo`. 
+Isso garante que todo ToDo é criado com um estado padrão, um conjunto fixo de constantes, neste caso o 'draft', e só poderá ter os estados possíveis listados no Enum, que também está documentado.
+
+O `back_populates` permite uma associação bilateral das tabelas. Tanto User acessar ToDo, quanto ToDo acessar User. 
+ 
+**Bugs** 🐛
+Com a implementação da classe `TodoState` e o uso do Enum, surgiu um erro estranho de `PydanticSchemaGenerationError`, indicando que o Pydantic não conseguiu gerar o schema para `TodoState`.
+O problema era que a importação do Enum estava errada; estava sendo importado do SQLAlchemy, mas deveria ser `from enum import Enum`.
+
+![alt text](static/imgs/enums.png)
+
+Uma dica valiosa é gerar um `task test -x --pdb` para depurar o erro. Isso permite que você veja o erro e o código que o causou.
+
+Agora um endpoint de get com filtros. Nesse endpoint, se os parametros forem passados, ele deve ser acrescido na query. Esse endpoint possue 'offset' que serve para pular um número específico de resultados sequenciamente, e o 'limit' para quantos objetos devem retornar a consulta. Esse recurso é uma forma de paginação simples
+
+```
+todos = session.scalars(query.offset(offset).limit(limit)).all()
+```
+
+O método scalars é um método do SQLAlchemy que retorna um objeto escalar, ou seja, um objeto que não é uma lista, mas um objeto único. O método all() é um método do SQLAlchemy que retorna todos os objetos de uma consulta. Diferente do execute, que retorna um objeto de resultado.
+
+* Estudo o padrão do tipo Query passando pelo validador. 
+
+Como necessitamos de vários ToDos, então avaçamos no uso do FactoryBoy. A partir de um método do tipo ToDo. Usamos um user_id = 1, pois não temos um sistema de autenticação, então todos os ToDos são do mesmo usuário.
+
+```python
+class TodoFactory(factory.Factory):
+    class Meta:
+        model = Todo
+
+    title = factory.Faker('text') #Com faker, ele cria algo qualquer do mesmo tipo para o lugar : gerador de LeroLero
+    description = factory.Faker('text')
+    state = factory.fuzzy.FuzzyChoice(TodoState) # FuzzyChoice é um valor randômico a partir do TodoState
+    user_id = 1
+```
+
+O factoryBoy tem base na lib do faker, protanto, você solicita um novo objeto por meio do `TodoFactory.create_batch(XQUEVCQUER)`. Além de você mencionar algum campo específico. 
+
+```python   
+TodoFactory.create_batch(5, user_id=user.id)
+```
+
+Para lidar com adição de mais de um objeto no banco de dados, usamos no SQLAlchemy o bulk_save_objects. Isso é útil para inserir muitos objetos de uma vez. 
+
+
+```python
+    session.bulk_save_objects(TodoFactory.create_batch(5, user_id=user.id))
+```
+
+Com os testes voltados para o Patch, algo muito interessante ocorre em termos de atualização do objeto. 
+
+```
+    for key, value in todo.model_dump(exclude_unset=True).items():
+        setattr(db_todo, key, value)
+
+```
+
+Para podermos alterar **somente** os valores que recebemos no modelo, temos que fazer um dump somente dos valores que recebemos e os atualizar no objeto que pegamos da base de dados. 
+A linha for key, value in todo.model_dump(exclude_unset=True).items(): está iterando através de todos os campos definidos na instância todo do modelo de atualização. 
+A função model_dump é um método que vem do modelo BaseModel do Pydantic e permite exportar o modelo para um dicionário.
+O parâmetro exclude_unset=True é importante aqui, pois significa que apenas os campos que foram explicitamente definidos (ou seja, aqueles que foram incluídos na solicitação PATCH) serão incluídos no dicionário resultante. Isso permite que você atualize apenas os campos que foram fornecidos na solicitação, deixando os outros inalterados.
+
+Qual a diferença entre session.update com com `for key, value in todo.model_dump(exclude_unset=True).items()`? E se eu mandar vazio, ele vai atualizar com vazio?
+
+
+Se você usar session.query(Model).filter(...).update(data), ele gera um UPDATE direto no banco de dados e pode sobrescrever campos inteiros, inclusive tornando valores NULL caso não estejam no data.
+Ele não lida automaticamente com apenas os campos modificados, a menos que você controle isso explicitamente.
+Isso pode ser perigoso se você passar um dicionário incompleto porque ele pode definir campos não mencionados como NULL, dependendo da configuração do banco e da modelagem do ORM.
+
+✅ Evita sobrescrever valores inexistentes na requisição (pois só atualiza os recebidos).
+✅ Mantém a integridade do objeto (dado que só altera campos específicos).
+✅ Permite manipulação antes do commit (caso queira validar algo antes de persistir).
+
+
+**Bugs** 🐛
+Para adicionar created_at e updated_at ToDo , foi realizado uma migração. Porém, nos testes relativos a create_todo, não foi possível usar o freeze_time, pois o created_at e updated_at são gerados no banco de dados. E o freeze_time não alcança essa operação. Portanto, usei do artifício (feio) do mock.any para verificar o retorno. Ou teria que trocar para
+
+```
+created_at: Mapped[datetime] = mapped_column(
+    init=False, default=datetime.utcnow
+)
+
+```
